@@ -7,7 +7,10 @@ from studio import validate_lesson
 
 def episode_data(lesson):
     validate_lesson(lesson)
-    return {key: lesson[key] for key in ('title_vi', 'title_zh', 'speakers', 'lines')}
+    result = {key: lesson[key] for key in ('title_vi', 'title_zh', 'speakers')}
+    result['lines'] = [{key: line[key] for key in ('speaker', 'zh', 'pinyin', 'vi')}
+                       for line in lesson['lines']]
+    return result
 
 
 def draft_prompt(lesson, brand, level):

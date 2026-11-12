@@ -56,15 +56,34 @@ Các ô tiếp theo dùng `ELEVENLABS_VOICE_3`…`ELEVENLABS_VOICE_10` và tên 
 
 Lựa chọn dropdown lưu bằng `LESSON_VOICE_SLOT_1`…`LESSON_VOICE_SLOT_10`. Bài mới lưu cách gán vào `speaker_voices` trong JSON nếu đã chọn giọng hợp lệ. Đổi dropdown trên JSON đang mở cập nhật lựa chọn giọng trong bài mà không đổi lời thoại. Giọng đã lưu trong JSON vẫn có thể dùng dù không nằm trong kho hiện tại.
 
-ElevenLabs nhận chữ Hán và ngữ cảnh trước/sau, không đọc pinyin hoặc bản dịch. Mặc định model `eleven_multilingual_v2`, tốc độ 1.0, độ ổn định 0.35, khoảng nghỉ 0.2 giây giữa lượt, không thêm khoảng nghỉ sau lượt cuối. Có thể chỉnh trong tab ElevenLabs. Tài liệu [Create speech](https://elevenlabs.io/docs/api-reference/text-to-speech/convert).
+Mặc định mới dùng `eleven_v4`, **Biểu cảm Nhẹ**, tốc độ 1.0, độ ổn định 0.35, khoảng nghỉ 0.2 giây giữa lượt. Cấu hình cũ chưa có `VOICE_EXPRESSION` được chuyển sang v4 và tốc độ 1.0 một lần khi mở phiên bản mới; Voice ID được giữ nguyên. Cấu hình đã lưu mức biểu cảm được giữ lại. Mở tập cũ sẽ khôi phục model và mức biểu cảm trong manifest của tập đó (manifest cũ dùng Tắt). Tài liệu [Create speech](https://elevenlabs.io/docs/api-reference/text-to-speech/convert).
 
-Mỗi lượt được chuẩn hóa bằng FFmpeg loudnorm, mục tiêu -16 LUFS và đỉnh -1.5 dBTP. Cache `.cache/audio` xét chữ Hán, giọng, model, tốc độ, độ ổn định và ngữ cảnh; thay khoảng nghỉ chỉ cần tạo lại WAV, không gọi TTS. Không tự gửi lại ElevenLabs khi timeout để tránh tính phí trùng. Voice ID phải khả dụng với tài khoản API của bạn.
+## Cảm xúc và nghe thử
+
+1. Mở tab **Cảm xúc & nghe thử**, chọn **Nhẹ / Vừa / Mạnh**. Bấm **Dùng model biểu cảm v4** nếu đang dùng model cũ.
+2. Kịch bản mới được yêu cầu có cảm xúc riêng cho từng câu. Với JSON có sẵn, bấm **ChatGPT phân tích cảm xúc cho kịch bản hiện tại**; tiện ích dùng tab Edge đã kết nối. Kết quả chỉ cập nhật metadata, không được thay lời thoại, pinyin, bản dịch hay Voice ID. Tool lưu một bản `lesson.json` mới trong thư mục `_cam_xuc`.
+3. Chọn câu trong bảng, sửa dropdown cảm xúc và mức câu 1–3 rồi bấm **Áp dụng cảm xúc cho câu đang chọn**. Bấm **Lưu JSON** để giữ chỉnh sửa thủ công. Nếu vừa sửa JSON trực tiếp, làm mới bảng trước.
+4. Chọn lượt bắt đầu và số lượt 1, 2, 3 hoặc 5, bấm **Chọn giọng & tạo bản nghe thử**. Chọn Voice ID qua dropdown; tool chỉ tạo WAV cho các lượt đó rồi phát bằng audio Windows, không dựng video. Có nút phát lại file vừa tạo. Khi ưng ý, xuất MP4 như thường lệ.
+
+Ví dụ metadata của một lượt:
+
+```json
+{"speaker":"Người 1","zh":"啊？真的吗？","pinyin":"Á? Zhēn de ma?","vi":"Hả? Thật sao?","emotion":"surprised","emotion_strength":2}
+```
+
+Với mức Vừa, phần tạo giọng nhận `[surprised] 啊？真的吗？`; phụ đề vẫn chỉ có chữ Hán, pinyin và bản dịch. Nhẹ ưu tiên phản ứng ở câu quan trọng; Vừa/Mạnh tăng sắc thái theo mức từng câu. Câu `neutral` không thêm tag. Các nhãn gồm bất ngờ, tò mò, vui, hào hứng, buồn, lo lắng, bực mình, giận, suy nghĩ, nhẹ nhõm, nói nhỏ, cười nhẹ và thở dài. Không ép mọi câu phải diễn cảm.
+
+V4 dùng Stability và Similarity; tool không gửi Speed, Style hoặc ngữ cảnh trước/sau cho model này. Tốc độ được chỉnh bằng FFmpeg `atempo` tại máy để giữ cao độ và dùng lại MP3 đã trả phí khi chỉ đổi tốc độ. Model v2 vẫn dùng tốc độ/ngữ cảnh API như trước và cần đặt **Biểu cảm = Tắt**. Xem [hướng dẫn giọng nói](https://elevenlabs.io/docs/eleven-creative/playground/text-to-speech) và [audio tags](https://elevenlabs.io/docs/overview/capabilities/text-to-speech/best-practices).
+
+Độ tự nhiên phụ thuộc Voice ID và tình huống; audio tags không bảo đảm giọng nào cũng diễn đạt giống nhau. Nên nghe thử một đoạn bất ngờ và một đoạn bình thường trước. Nghe thử có thể dùng credit cho đoạn mới. Cùng giọng, model, text/tag và thông số sẽ dùng lại audio khi xuất MP4; đổi cảm xúc chỉ tạo lại câu có phần đọc thực sự thay đổi. Đổi tốc độ v4 hoặc khoảng nghỉ chỉ xử lý WAV tại máy.
+
+Mỗi lượt được chuẩn hóa bằng FFmpeg loudnorm, mục tiêu -16 LUFS và đỉnh -1.5 dBTP. Cache `.cache/audio` xét chính xác nội dung gửi TTS (gồm tag nếu có), giọng, model và thông số API; nhánh v2 vẫn giữ định danh cache cũ. Không tự gửi lại ElevenLabs khi timeout để tránh tính phí trùng. Voice ID phải khả dụng với tài khoản API của bạn.
 
 ## Khi xuất bị gián đoạn
 
 Nút **Tiếp tục lần xuất bị gián đoạn…** mở thư mục có `export_job.json` và `lesson.json`, khôi phục thông số xuất gốc rồi dùng lại audio đã xong. Key chỉ lấy từ cấu hình hiện tại; không lưu trong job. Tiến độ được ghi an toàn sau mỗi lượt. Lỗi chi tiết nằm trong `export_job.json` và `task_errors.log`.
 
-Nếu ElevenLabs mất phản hồi sau khi đã nhận yêu cầu, tool tra cứu lịch sử và chỉ tải lại khi có đúng một bản khớp chữ Hán, giọng, model, tốc độ, độ ổn định và khoảng thời gian yêu cầu. Đây là GET audio đã tạo, không gửi lại TTS. Nếu không chứng minh được bản khớp hoặc key thiếu quyền History, tác vụ dừng và giữ dữ liệu để bạn kiểm tra tài khoản; không tự tạo lại đoạn có thể đã trừ credit. Thư mục `assets` có file `.request.json` cho yêu cầu chưa xác định kết quả, không chứa API key.
+Nếu ElevenLabs mất phản hồi sau khi đã nhận yêu cầu, tool tra cứu lịch sử và chỉ tải lại khi có đúng một bản khớp nội dung TTS gồm tag, giọng, model, thông số API thực tế và khoảng thời gian yêu cầu. Đây là GET audio đã tạo, không gửi lại TTS. Nếu không chứng minh được bản khớp hoặc key thiếu quyền History, tác vụ dừng và giữ dữ liệu để bạn kiểm tra tài khoản; không tự tạo lại đoạn có thể đã trừ credit. `assets` và cache chung có file `.request.json` không chứa API key, ngăn gửi trùng cả khi nghe thử lại trong thư mục mới. Không xóa file này để ép tạo lại khi chưa kiểm tra lịch sử. Bản nghe thử ghi tiến độ riêng trong `preview_job.json`.
 
 ## Tập cũ và file xuất
 

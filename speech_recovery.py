@@ -42,12 +42,12 @@ def recover_audio(pending, api_key, target, cancel=None):
         matches = []
         for item in data.get('history', []):
             settings = item.get('settings') or {}
+            expected = pending.get('voice_settings') or {
+                'speed': pending['speed'], 'stability': pending['stability'], 'similarity_boost': 0.75}
             if (item.get('text') == pending['text'] and item.get('voice_id') == pending['voice']
                     and item.get('model_id') == pending['model']
                     and start-5 <= item.get('date_unix', 0) < start+600
-                    and settings.get('speed') == pending['speed']
-                    and settings.get('stability') == pending['stability']
-                    and settings.get('similarity_boost') == 0.75):
+                    and all(settings.get(key) == value for key, value in expected.items())):
                 matches.append(item)
         if len(matches) != 1 or data.get('has_more'):
             return False

@@ -15,6 +15,8 @@ from PIL import ImageTk
 from studio import ROOT, Cancelled, card, export_video, generate_lesson, validate_lesson
 from settings_store import load_settings, save_settings
 from premium import PALETTES, TOPICS, audit_lesson, publishing_data, publishing_kit, scene, thumbnail
+from speech_performance import (EMOTIONS, EXPRESSIVE_MODELS, LEVELS, annotation_prompt,
+                                apply_annotations, check_expression)
 
 
 class Studio(tk.Tk):
@@ -48,7 +50,11 @@ class Studio(tk.Tk):
         self.chatgpt_profile_used = None
         self.brand = tk.StringVar(value='Chuyện nhỏ · Tiếng Trung')
         self.eleven_key = tk.StringVar(value=os.environ.get('ELEVENLABS_API_KEY', ''))
-        self.tts_model = tk.StringVar(value='eleven_multilingual_v2')
+        self.tts_model = tk.StringVar(value='eleven_v4')
+        self.expression = tk.StringVar(value='Nhẹ')
+        self.preview_start = tk.StringVar(value='1')
+        self.preview_count = tk.StringVar(value='3')
+        self.preview_audio_path = None
         self.voice_ids = [tk.StringVar(value=os.environ.get(f'ELEVENLABS_VOICE_{i}', '')) for i in range(1, 11)]
         self.voice_names = [tk.StringVar(value=os.environ.get(f'ELEVENLABS_VOICE_{i}_NAME', '')) for i in range(1, 11)]
         self.cast = tk.StringVar(value='Ngọc, Quân')
@@ -70,6 +76,7 @@ class Studio(tk.Tk):
             'ELEVENLABS_API_KEY': self.eleven_key, 'ELEVENLABS_MODEL': self.tts_model,
             'VOICE_SPEED': self.rate, 'VIDEO_RESOLUTION': self.resolution,
             'VOICE_STABILITY': self.stability, 'VOICE_TURN_GAP': self.turn_gap,
+            'VOICE_EXPRESSION': self.expression,
             'OUTPUT_FOLDER': self.folder, 'CHANNEL_NAME': self.brand,
             'LESSON_TOPIC': self.topic, 'LESSON_LEVEL': self.level,
             'LESSON_MINUTES': self.minutes, 'LESSON_SPEAKERS': self.cast,
@@ -84,6 +91,12 @@ class Studio(tk.Tk):
             if name in self.saved_settings:
                 value = self.saved_settings[name]
                 variable.set(value.lower() in ('true', '1', 'yes') if isinstance(variable, tk.BooleanVar) else value)
+        # Upgrade the old flat-reading preset once; saved episodes restore their own settings.
+        if 'VOICE_EXPRESSION' not in self.saved_settings:
+            self.tts_model.set('eleven_v4')
+            self.rate.set('1.0')
+        if self.expression.get() not in LEVELS:
+            self.expression.set('Nhẹ')
         try:
             count = self.get_speaker_count()
         except ValueError:
@@ -104,6 +117,10 @@ class Studio(tk.Tk):
         style.configure('.', font=('Segoe UI', 10), background='#111d30', foreground='#e5edf7')
         style.configure('TFrame', background='#0b1120')
         style.configure('TLabel', background='#0b1120')
+        style.configure('Treeview', background='#111d30', fieldbackground='#111d30',
+                        foreground='#e5edf7', rowheight=28)
+        style.configure('Treeview.Heading', background='#20334c', foreground='#e5edf7')
+        style.map('Treeview', background=[('selected', '#176d68')], foreground=[('selected', '#ffffff')])
         style.configure('TCheckbutton', background='#0b1120', foreground='#e5edf7')
         style.map('TCheckbutton', background=[('active', '#111d30')])
         style.configure('TButton', padding=(12, 5), background='#20344f')
@@ -193,11 +210,11 @@ class Studio(tk.Tk):
         self.entry(voice_settings, 'ElevenLabs key', self.eleven_key, 0, secret=True)
         ttk.Button(voice_settings, text='Kho 10 giọng…', command=self.edit_voice_bank).grid(row=1, column=0, columnspan=2, sticky='ew', pady=8)
         ttk.Label(voice_settings, text='Lưu tối đa 10 Voice ID, đặt tên dễ nhớ.\nMỗi kịch bản được chọn giọng riêng cho từng nhân vật.', foreground='#9badc5', wraplength=330).grid(row=2, column=0, columnspan=2, sticky='w', pady=4)
-        self.entry(voice_settings, 'Model giọng', self.tts_model, 3, ['eleven_multilingual_v2', 'eleven_flash_v2_5', 'eleven_turbo_v2_5'])
+        self.entry(voice_settings, 'Model giọng', self.tts_model, 3, [*EXPRESSIVE_MODELS, 'eleven_multilingual_v2', 'eleven_flash_v2_5', 'eleven_turbo_v2_5'])
         self.entry(voice_settings, 'Tốc độ', self.rate, 4, ['0.7', '0.8', '0.9', '1.0', '1.1', '1.2'])
         self.entry(voice_settings, 'Độ ổn định', self.stability, 5, ['0.2', '0.35', '0.5', '0.75', '1.0'])
         self.entry(voice_settings, 'Nghỉ giữa lượt (s)', self.turn_gap, 6, ['0', '0.1', '0.2', '0.3', '0.45'])
-        ttk.Label(voice_settings, text='Gợi ý: tốc độ 1.0, ổn định 0.35, nghỉ 0.2 giây.\nỔn định thấp: ngữ điệu biến đổi nhiều hơn.\nTạo giọng gửi lời thoại tới ElevenLabs và có thể trừ credit.', foreground='#9badc5', wraplength=350).grid(row=7, column=0, columnspan=2, sticky='w', pady=8)
+        ttk.Label(voice_settings, text='Giọng biểu cảm: chọn v4, sang tab Cảm xúc & nghe thử.\nV4 đổi tốc độ bằng xử lý audio tại máy; không đổi cao độ.\nTạo giọng gửi lời thoại tới ElevenLabs và có thể trừ credit.', foreground='#9badc5', wraplength=350).grid(row=7, column=0, columnspan=2, sticky='w', pady=8)
         ttk.Button(voice_settings, text='Mở ElevenLabs', command=lambda: __import__('webbrowser').open('https://elevenlabs.io/app/voice-library')).grid(row=8, column=0, columnspan=2, sticky='ew', pady=4)
         self.entry(settings, 'Chất lượng', self.resolution, 7, ['1080p', '720p'])
         ttk.Button(voice_settings, text='Lưu cấu hình ngay', command=lambda: self.persist_settings(notify=True)).grid(row=9, column=0, columnspan=2, sticky='ew', pady=4)
@@ -213,6 +230,7 @@ class Studio(tk.Tk):
         publish = self.form_tab(tabs, 'Ảnh & bộ đăng')
         ttk.Button(publish, text='Kiểm tra kịch bản & làm mới bộ đăng', command=self.refresh_kit).pack(fill='x', pady=8)
         self.asset_action_buttons = []
+        self.build_performance_tab(tabs)
         def asset_button(text, command):
             button = ttk.Button(publish, text=text, command=command)
             button.pack(fill='x', pady=5)
@@ -436,7 +454,7 @@ class Studio(tk.Tk):
             parent.grab_set()
         self.render_cast_voices()
 
-    def choose_voices(self, lesson):
+    def choose_voices(self, lesson, preview=False):
         used = [name for name in lesson['speakers'] if any(line['speaker'] == name for line in lesson['lines'])]
         dialog = self.modal('Chọn giọng cho kịch bản', 760, 290 + len(used)*34)
         body, actions = self.modal_body(dialog)
@@ -474,7 +492,7 @@ class Studio(tk.Tk):
         refresh_choices()
         row = len(used) + 2
         ttk.Button(body, text='Sửa kho 10 giọng…', command=lambda: (self.edit_voice_bank(dialog), refresh_choices())).grid(row=row, column=0, columnspan=2, sticky='w', pady=10)
-        ttk.Label(body, text=f'Model: {self.tts_model.get()}  ·  Tốc độ: {self.rate.get()}  ·  Ổn định: {self.stability.get()}\nBấm xuất sẽ gửi lời thoại tới ElevenLabs và có thể trừ credit.', foreground='#9badc5', wraplength=680).grid(row=row+1, column=0, columnspan=2, sticky='w', pady=8)
+        ttk.Label(body, text=f'Model: {self.tts_model.get()}  ·  Biểu cảm: {self.expression.get()}  ·  Tốc độ: {self.rate.get()}\nNghe thử hoặc xuất sẽ gửi lời thoại chưa có cache tới ElevenLabs và có thể trừ credit.', foreground='#9badc5', wraplength=680).grid(row=row+1, column=0, columnspan=2, sticky='w', pady=8)
         result = {}
         def confirm():
             selected = {speaker: choices[speaker].get(variables[speaker].get(), '') for speaker in used}
@@ -487,7 +505,7 @@ class Studio(tk.Tk):
                 return
             result.update(selected)
             dialog.destroy()
-        ttk.Button(actions, text='Tạo giọng & xuất MP4', style='Accent.TButton', command=confirm).pack(side='right')
+        ttk.Button(actions, text='Tạo giọng & nghe thử' if preview else 'Tạo giọng & xuất MP4', style='Accent.TButton', command=confirm).pack(side='right')
         ttk.Button(actions, text='Hủy', command=dialog.destroy).pack(side='right', padx=6)
         self.wait_window(dialog)
         return result or None
@@ -516,6 +534,163 @@ class Studio(tk.Tk):
     def get_lesson(self):
         return validate_lesson(json.loads(self.editor.get('1.0', 'end')))
 
+    def build_performance_tab(self, tabs):
+        body = self.form_tab(tabs, 'Cảm xúc & nghe thử')
+        ttk.Label(body, text='GIỌNG NÓI THEO TÌNH HUỐNG', font=('Segoe UI', 15, 'bold'), foreground='#62ded0').pack(anchor='w', pady=8)
+        ttk.Label(body, text='Kịch bản mới tự có cảm xúc theo từng lượt. Với JSON cũ, bấm phân tích bên dưới. Chữ Hán, pinyin và bản dịch được giữ nguyên.', wraplength=680).pack(anchor='w', pady=5)
+        settings = ttk.Frame(body)
+        settings.pack(fill='x', pady=6)
+        self.entry(settings, 'Mức biểu cảm', self.expression, 0, list(LEVELS))
+        def action(text, command):
+            button = ttk.Button(body, text=text, command=command)
+            button.pack(fill='x', pady=4)
+            self.asset_action_buttons.append(button)
+        action('Dùng model biểu cảm v4', self.enable_expression)
+        action('1. ChatGPT phân tích cảm xúc cho kịch bản hiện tại', self.annotate_emotions)
+        action('Làm mới danh sách từ JSON đang sửa', self.refresh_emotions)
+        table_frame = ttk.Frame(body)
+        table_frame.pack(fill='both', expand=True, pady=8)
+        self.emotion_table = ttk.Treeview(table_frame, columns=('turn', 'speaker', 'zh', 'emotion', 'strength'), show='headings', height=9, selectmode='browse')
+        for key, label, width in [('turn', 'Lượt', 50), ('speaker', 'Người nói', 90), ('zh', 'Lời thoại', 270), ('emotion', 'Cảm xúc', 110), ('strength', 'Mức câu', 65)]:
+            self.emotion_table.heading(key, text=label)
+            self.emotion_table.column(key, width=width, minwidth=50, stretch=key == 'zh')
+        scroll = ttk.Scrollbar(table_frame, command=self.emotion_table.yview)
+        scroll.pack(side='right', fill='y')
+        self.emotion_table.configure(yscrollcommand=scroll.set)
+        self.emotion_table.pack(side='left', fill='both', expand=True)
+        self.emotion_table.bind('<<TreeviewSelect>>', self.select_emotion)
+        controls = ttk.Frame(body)
+        controls.pack(fill='x', pady=5)
+        self.selected_emotion = tk.StringVar(value=EMOTIONS['neutral'])
+        self.selected_strength = tk.StringVar(value='2')
+        self.entry(controls, 'Cảm xúc câu đang chọn', self.selected_emotion, 0, list(EMOTIONS.values()))
+        self.entry(controls, 'Mức câu (1 nhẹ → 3 cao)', self.selected_strength, 1, ['1', '2', '3'])
+        action('Áp dụng cảm xúc cho câu đang chọn', self.edit_emotion)
+        self.entry(controls, 'Nghe từ lượt số', self.preview_start, 2, [str(i) for i in range(1, 151)])
+        self.entry(controls, 'Số lượt nghe thử', self.preview_count, 3, ['1', '2', '3', '5'])
+        action('2. Chọn giọng & tạo bản nghe thử', self.preview_speech)
+        action('Phát lại bản nghe thử đã có', self.play_preview)
+        action('Dừng nghe', self.stop_preview)
+        ttk.Label(body, text='Chọn một câu trong bảng để nghe từ câu đó. Nghe thử dùng credit ElevenLabs cho audio mới; cùng cấu hình sẽ dùng lại khi xuất MP4. Độ biểu cảm phụ thuộc Voice ID. Model v2 dùng mức Tắt.', foreground='#9badc5', wraplength=680).pack(anchor='w', pady=8)
+
+    def enable_expression(self):
+        if self.busy:
+            return
+        self.tts_model.set('eleven_v4')
+        if self.expression.get() == 'Tắt':
+            self.expression.set('Nhẹ')
+        self.legacy_audio_settings = None
+        self.status.set('Đã chọn v4. Phân tích cảm xúc, chọn giọng và nghe thử trước khi xuất cả tập.')
+
+    @staticmethod
+    def performance_key(lesson):
+        return json.dumps({k: v for k, v in lesson.items() if k != 'speaker_voices'}, ensure_ascii=False, sort_keys=True)
+
+    def refresh_emotions(self):
+        try:
+            lesson = self.get_lesson()
+            self.emotion_source = self.performance_key(lesson)
+            self.emotion_table.delete(*self.emotion_table.get_children())
+            for i, line in enumerate(lesson['lines']):
+                self.emotion_table.insert('', 'end', iid=str(i), values=(i+1, line['speaker'], line['zh'], EMOTIONS[line.get('emotion', 'neutral')], line.get('emotion_strength', 2)))
+        except Exception as exc:
+            self.status.set('Chưa đọc được cảm xúc: ' + str(exc))
+
+    def select_emotion(self, event=None):
+        selected = self.emotion_table.selection()
+        if selected:
+            values = self.emotion_table.item(selected[0], 'values')
+            self.selected_emotion.set(values[3])
+            self.selected_strength.set(values[4])
+            self.preview_start.set(str(int(selected[0])+1))
+
+    def edit_emotion(self):
+        if self.busy:
+            return
+        try:
+            lesson = self.get_lesson()
+            if self.performance_key(lesson) != self.emotion_source:
+                self.refresh_emotions()
+                raise ValueError('JSON đã thay đổi. Danh sách vừa làm mới; hãy chọn lại câu cần sửa.')
+            selected = self.emotion_table.selection()
+            if not selected:
+                raise ValueError('Chọn một câu trong bảng trước.')
+            emotion = next(key for key, label in EMOTIONS.items() if label == self.selected_emotion.get())
+            index = int(selected[0])
+            lesson['lines'][index].update(emotion=emotion, emotion_strength=int(self.selected_strength.get()))
+            validate_lesson(lesson)
+            self.put_lesson(lesson)
+            self.emotion_table.selection_set(str(index))
+            self.status.set('Đã cập nhật cảm xúc trong JSON. Bấm Lưu JSON để giữ bản chỉnh sửa.')
+        except Exception as exc:
+            messagebox.showerror('Chưa sửa được cảm xúc', str(exc))
+
+    def annotate_emotions(self):
+        if self.busy:
+            return
+        try:
+            lesson = copy.deepcopy(self.get_lesson())
+            source = self.performance_key(lesson)
+            chat = self.get_chatgpt()
+        except Exception as exc:
+            messagebox.showerror('Chưa phân tích được', str(exc))
+            return
+        self.status.set('ChatGPT đang đọc tình huống và gán cảm xúc cho từng lượt…')
+        def work():
+            from chatgpt_web import json_response
+            result = apply_annotations(lesson, json_response(chat.send(annotation_prompt(lesson), self.cancel)))
+            self.events.put(('performance', {'source': source, 'lesson': result}))
+        self.launch(work)
+
+    def apply_performance(self, value):
+        current = self.get_lesson()
+        if self.performance_key(current) != value['source']:
+            raise ValueError('Kịch bản đã được sửa khi ChatGPT phân tích; chưa áp dụng kết quả cũ. Bấm phân tích lại.')
+        result = value['lesson']
+        if 'speaker_voices' in current:
+            result['speaker_voices'] = current['speaker_voices']
+        self.put_lesson(result)
+        out = Path(self.folder.get()).expanduser() / (datetime.now().strftime('%Y%m%d_%H%M%S_%f') + '_cam_xuc')
+        out.mkdir(parents=True, exist_ok=True)
+        (out/'lesson.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
+        self.last_output = out
+        self.status.set('Đã gán cảm xúc và lưu JSON: ' + str(out/'lesson.json'))
+
+    def preview_speech(self):
+        if self.busy or not self.check_eleven():
+            return
+        try:
+            lesson = self.get_lesson()
+            start, count = int(self.preview_start.get()), int(self.preview_count.get())
+            if not 1 <= start <= len(lesson['lines']) or count not in (1, 2, 3, 5):
+                raise ValueError('Chọn lượt bắt đầu có trong kịch bản và nghe 1, 2, 3 hoặc 5 lượt.')
+            check_expression(self.tts_model.get(), LEVELS[self.expression.get()])
+        except Exception as exc:
+            messagebox.showerror('Chưa nghe thử được', str(exc))
+            return
+        mapping = self.choose_voices(lesson, preview=True)
+        if mapping is None:
+            return
+        lesson['speaker_voices'] = mapping
+        self.put_lesson(lesson)
+        options = dict(self.export_options(), audio_preview=True, preview_start=start, preview_count=count)
+        out = Path(self.folder.get()).expanduser() / (datetime.now().strftime('%Y%m%d_%H%M%S_%f') + '_nghe_thu')
+        def work():
+            result = export_video(lesson, out, options, lambda s: self.events.put(('status', s)), self.cancel)
+            self.events.put(('audio_preview', result))
+        self.launch(work)
+
+    def play_preview(self):
+        if self.preview_audio_path and self.preview_audio_path.is_file():
+            import winsound
+            winsound.PlaySound(str(self.preview_audio_path), winsound.SND_FILENAME | winsound.SND_ASYNC)
+        else:
+            self.status.set('Chưa có bản nghe thử. Bấm “Chọn giọng & tạo bản nghe thử” trước.')
+
+    def stop_preview(self):
+        import winsound
+        winsound.PlaySound(None, 0)
+
     def put_lesson(self, lesson, sync_cast=True):
         self.speaker_voices = dict(lesson.get('speaker_voices', {}))
         if sync_cast:
@@ -534,6 +709,7 @@ class Studio(tk.Tk):
         self.show_preview(0)
         self.refresh_kit()
         self.reset_asset_source(lesson)
+        self.refresh_emotions()
 
     def sample(self, sync_cast=True):
         if self.busy:
@@ -648,7 +824,8 @@ class Studio(tk.Tk):
                         self.rate.set(str(old['speed']))
                     self.stability.set(str(old.get('stability', 0.5)))
                     self.turn_gap.set(str(old.get('turn_gap', 0.45)))
-                    if not old.get('speech_context'):
+                    self.expression.set(next((label for label, key in LEVELS.items() if key == old.get('expression', 'off')), 'Tắt'))
+                    if old.get('legacy_audio', 'speech_context' not in old) and self.tts_model.get() not in EXPRESSIVE_MODELS:
                         self.legacy_audio_settings = {
                             'speaker_voices': mapping, 'tts_model': self.tts_model.get(),
                             'speed': float(self.rate.get()), 'stability': float(self.stability.get()),
@@ -820,6 +997,7 @@ class Studio(tk.Tk):
             return
         topic, level, minutes, key, model = (v.get() for v in [self.topic, self.level, self.minutes, self.key, self.model])
         use_chatgpt = self.ai_provider.get() == 'ChatGPT Web'
+        expression = LEVELS[self.expression.get()]
         if not topic.strip() or (not use_chatgpt and (not key.strip() or not model.strip())):
             messagebox.showinfo('Cần cấu hình', 'Nhập chủ đề; chọn ChatGPT Web hoặc điền Gemini API key và model dự phòng.')
             return
@@ -839,7 +1017,7 @@ class Studio(tk.Tk):
         out = Path(self.folder.get()).expanduser() / datetime.now().strftime('%Y%m%d_%H%M%S_%f')
         def work():
             kwargs = {'text_sender': lambda prompt: chat.send(prompt, self.cancel)} if chat else {}
-            lesson = generate_lesson(topic, level, minutes, key, model, self.cancel, speakers=speakers, **kwargs)
+            lesson = generate_lesson(topic, level, minutes, key, model, self.cancel, speakers=speakers, expression=expression, **kwargs)
             lesson.pop('publishing', None)
             lesson.pop('thumbnail_images', None)
             if selected_voices:
@@ -854,6 +1032,7 @@ class Studio(tk.Tk):
         options = {'brand': self.brand.get(), 'speaker_voices': dict(self.speaker_voices),
                 'speed': self.rate.get(), 'resolution': self.resolution.get(),
                 'stability': self.stability.get(), 'turn_gap': self.turn_gap.get(),
+                'expression': LEVELS[self.expression.get()],
                 'eleven_key': self.eleven_key.get(), 'tts_model': self.tts_model.get(),
                 'local_publishing': False, 'mode': 'podcast', 'premium': self.premium.get(), 'shorts': self.shorts.get(),
                 'theme': self.theme.get(), 'level': self.level.get(), 'reuse_dir': self.reuse_dir}
@@ -861,6 +1040,7 @@ class Studio(tk.Tk):
             old = self.legacy_audio_settings
             try:
                 options['legacy_audio'] = (options['speaker_voices'] == old['speaker_voices']
+                    and options['expression'] == 'off'
                     and options['tts_model'] == old['tts_model']
                     and all(float(options[key]) == old[key] for key in ('speed', 'stability', 'turn_gap')))
             except ValueError:
@@ -880,6 +1060,7 @@ class Studio(tk.Tk):
             return
         try:
             lesson = self.get_lesson()
+            check_expression(self.tts_model.get(), LEVELS[self.expression.get()])
         except Exception as exc:
             messagebox.showerror('Cần kịch bản hợp lệ', str(exc))
             return
@@ -940,6 +1121,17 @@ class Studio(tk.Tk):
                         self.apply_asset_draft(value)
                     except Exception as exc:
                         self.status.set('Không nạp được bộ đăng: ' + str(exc))
+                elif event == 'performance':
+                    try:
+                        self.apply_performance(value)
+                    except Exception as exc:
+                        self.status.set(str(exc))
+                        messagebox.showerror('Chưa áp dụng được cảm xúc', str(exc))
+                elif event == 'audio_preview':
+                    self.preview_audio_path = value
+                    self.last_output = value.parent
+                    self.status.set('Đang phát bản nghe thử: ' + str(value) + ' · Có thể đổi giọng hoặc mức biểu cảm rồi thử lại.')
+                    self.play_preview()
                 elif event == 'draft':
                     self.last_output = value
                     self.status.set('Đã lưu kịch bản: ' + str(value) + ' · Duyệt lời thoại rồi bấm “Chọn giọng & xuất MP4”.')

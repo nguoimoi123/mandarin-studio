@@ -20,6 +20,8 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 import imageio_ffmpeg
+from speech_performance import (EXPRESSIVE_MODELS, PERFORMANCE_INSTRUCTION, check_expression,
+                                speech_text, validate_performance, voice_settings)
 
 ROOT = Path(__file__).resolve().parent
 FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
@@ -85,6 +87,7 @@ def validate_lesson(data):
     for index, line in enumerate(lines, 1):
         if not isinstance(line, dict) or line.get('speaker') not in speakers:
             raise ValueError(f'Nhân vật không hợp lệ ở lượt {index}.')
+        validate_performance(line)
         for field in ('zh', 'pinyin', 'vi'):
             if not isinstance(line.get(field), str) or not line[field].strip() or len(line[field]) > 600:
                 raise ValueError(f'Lượt {index}: {field} cần 1–600 ký tự.')
@@ -101,7 +104,7 @@ def validate_lesson(data):
     return data
 
 
-def generate_lesson(topic, level, minutes, api_key, model, cancel=None, speakers=None, text_sender=None, include_publishing=False):
+def generate_lesson(topic, level, minutes, api_key, model, cancel=None, speakers=None, text_sender=None, include_publishing=False, expression='off'):
     check(cancel)
     if text_sender is None and not api_key.strip():
         raise ValueError('Nhập Gemini API key ở mục cấu hình để AI viết kịch bản.')
@@ -146,10 +149,14 @@ Return JSON only with this exact shape:
 {{"title_zh":"中文标题", "title_vi":"Tiêu đề tiếng Việt",
 "speakers":{cast}, "lines":[{{"speaker":{first_speaker},"zh":"...","pinyin":"...","vi":"..."}}],
 "vocabulary":[{{"zh":"...","pinyin":"...","vi":"..."}}]}}'''
+    if expression != 'off':
+        prompt += PERFORMANCE_INSTRUCTION
     if text_sender is not None:
         from chatgpt_web import PUBLISHING_INSTRUCTION, json_response, validate_publishing
         request_prompt = prompt + ('\n' + PUBLISHING_INSTRUCTION if include_publishing else '\nOnly the lesson JSON. Do not create publishing copy or images.')
         lesson = validate_lesson(json_response(text_sender(request_prompt)))
+        if expression != 'off' and any('emotion' not in line or 'emotion_strength' not in line for line in lesson['lines']):
+            raise ValueError('AI chưa gán đủ cảm xúc. Yêu cầu lại kịch bản có emotion và emotion_strength cho từng lượt.')
         if set(lesson['speakers']) != set(speakers) or {line['speaker'] for line in lesson['lines']} != set(speakers):
             raise ValueError('ChatGPT chưa dùng đúng danh sách nhân vật đã chọn.')
         lesson['speakers'] = list(speakers)
@@ -185,6 +192,8 @@ Return JSON only with this exact shape:
     raw = re.sub(r'^```(?:json)?\s*|\s*```$', '', raw.strip())
     try:
         lesson = validate_lesson(json.loads(raw))
+        if expression != 'off' and any('emotion' not in line or 'emotion_strength' not in line for line in lesson['lines']):
+            raise ValueError('AI chưa gán đủ cảm xúc cho từng lượt thoại.')
         if (set(lesson['speakers']) != set(speakers)
                 or {line['speaker'] for line in lesson['lines']} != set(speakers)):
             raise ValueError('AI chưa dùng đúng danh sách nhân vật đã chọn. Hãy viết lại kịch bản.')
@@ -263,11 +272,10 @@ def speech(text, voice, speed, target, cancel, api_key, model='eleven_multilingu
         raise ValueError('Độ ổn định giọng cần từ 0 đến 1.')
     if not 0.7 <= float(speed) <= 1.2:
         raise ValueError('Tốc độ giọng cần từ 0.7 đến 1.2.')
-    payload = {'text': text, 'model_id': model, 'voice_settings': {
-        'stability': float(stability), 'similarity_boost': 0.75, 'speed': float(speed)}}
-    if previous_text:
+    payload = {'text': text, 'model_id': model, 'voice_settings': voice_settings(model, speed, stability)}
+    if previous_text and model not in EXPRESSIVE_MODELS:
         payload['previous_text'] = previous_text
-    if next_text:
+    if next_text and model not in EXPRESSIVE_MODELS:
         payload['next_text'] = next_text
     if model != 'eleven_multilingual_v2':
         payload['language_code'] = 'zh'
@@ -336,7 +344,7 @@ def export_video(lesson, out, options, log=lambda s: None, cancel=None):
     try:
         return _export_video(lesson, out, options, log, cancel)
     except Exception as exc:
-        job_file = Path(out) / 'export_job.json'
+        job_file = Path(out) / ('preview_job.json' if options.get('audio_preview') else 'export_job.json')
         if job_file.is_file():
             job = json.loads(job_file.read_text(encoding='utf-8'))
             job['state'] = 'cancelled' if isinstance(exc, Cancelled) else 'error'
@@ -344,7 +352,10 @@ def export_video(lesson, out, options, log=lambda s: None, cancel=None):
             _save_job(job_file, job)
             if not isinstance(exc, Cancelled):
                 completed = job.get('completed_turns', 0)
-                raise RuntimeError(f'Đã lưu {completed}/{len(lesson["lines"])} đoạn audio. {exc}\nTiếp tục lần xuất từ: {Path(out).resolve()}') from None
+                total = job.get('total_turns', len(lesson['lines']))
+                suffix = ('Bấm nghe thử lại với cùng cấu hình để dùng lại audio.' if options.get('audio_preview')
+                          else 'Tiếp tục lần xuất từ: ' + str(Path(out).resolve()))
+                raise RuntimeError(f'Đã lưu {completed}/{total} đoạn audio. {exc}\n{suffix}') from None
         raise
 
 
@@ -367,9 +378,21 @@ def _export_video(lesson, out, options, log=lambda s: None, cancel=None):
     if not 0 <= turn_gap <= 2:
         raise ValueError('Khoảng nghỉ giữa lượt thoại cần từ 0 đến 2 giây.')
     tts_model = options.get('tts_model', 'eleven_multilingual_v2')
+    expression = options.get('expression', 'off')
+    check_expression(tts_model, expression)
+    if expression != 'off' and not any('emotion' in line for line in lesson['lines']):
+        raise ValueError('Kịch bản chưa có cảm xúc. Mở tab “Cảm xúc & nghe thử”, bấm ChatGPT phân tích hoặc chọn cảm xúc cho câu rồi nghe thử.')
+    if legacy_audio and (expression != 'off' or tts_model in EXPRESSIVE_MODELS):
+        raise ValueError('Audio cũ không thể dùng với chế độ biểu cảm mới.')
     if legacy_audio and (stability != 0.5 or turn_gap != 0.45):
         raise ValueError('Giữ cấu hình cũ cần độ ổn định 0.5 và khoảng nghỉ 0.45; tắt chế độ dùng audio cũ để đổi nhịp đọc.')
-    speech_context = not legacy_audio and bool(options.get('speech_context', True))
+    speech_context = not legacy_audio and tts_model not in EXPRESSIVE_MODELS and bool(options.get('speech_context', True))
+    preview = bool(options.get('audio_preview'))
+    start = int(options.get('preview_start', 1)) - 1 if preview else 0
+    count = int(options.get('preview_count', 3)) if preview else len(lesson['lines'])
+    if not 0 <= start < len(lesson['lines']) or not 1 <= count <= (5 if preview else len(lesson['lines'])):
+        raise ValueError('Lượt bắt đầu hoặc số câu nghe thử không hợp lệ.')
+    end = min(start + count, len(lesson['lines']))
     out = Path(out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     assets = out / 'assets'
@@ -377,15 +400,16 @@ def _export_video(lesson, out, options, log=lambda s: None, cancel=None):
     saved_lesson = dict(lesson, speaker_voices=saved_voices)
     (out / 'lesson.json').write_text(json.dumps(saved_lesson, ensure_ascii=False, indent=2), encoding='utf-8')
     safe_keys = ('brand', 'speed', 'stability', 'turn_gap', 'tts_model', 'resolution', 'premium',
-                 'shorts', 'theme', 'level', 'local_publishing', 'speech_context', 'legacy_audio')
-    job = {'state': 'running', 'completed_turns': 0, 'total_turns': len(lesson['lines']),
+                 'shorts', 'theme', 'level', 'local_publishing', 'speech_context', 'legacy_audio',
+                 'expression', 'audio_preview', 'preview_start', 'preview_count')
+    job = {'state': 'running', 'completed_turns': 0, 'total_turns': end-start,
            'options': {key: options[key] for key in safe_keys if key in options}}
     job['options'].update(speaker_voices=saved_voices, speed=rate, stability=stability,
-                          turn_gap=turn_gap, tts_model=tts_model, speech_context=speech_context)
-    job_file = out / 'export_job.json'
+                          turn_gap=turn_gap, tts_model=tts_model, speech_context=speech_context, expression=expression)
+    job_file = out / ('preview_job.json' if preview else 'export_job.json')
     _save_job(job_file, job)
     width, height = (1280, 720) if options.get('resolution') == '720p' else (1920, 1080)
-    if options.get('premium'):
+    if options.get('premium') and not preview:
         from premium import scene, publishing_kit
         log('Kiểm tra toàn bộ bố cục trước khi tạo giọng…')
         for i in range(len(lesson['lines'])):
@@ -399,18 +423,26 @@ def _export_video(lesson, out, options, log=lambda s: None, cancel=None):
     cache.mkdir(parents=True, exist_ok=True)
     durations, audio_paths = [], []
     for i, line in enumerate(lesson['lines']):
+        if i < start or i >= end:
+            continue
         check(cancel)
         voice = speaker_voices[line['speaker']]
+        spoken = speech_text(line, expression)
         previous_text = lesson['lines'][i - 1]['zh'] if speech_context and i else ''
         next_text = lesson['lines'][i + 1]['zh'] if speech_context and i + 1 < len(lesson['lines']) else ''
         gap = turn_gap if legacy_audio or i + 1 < len(lesson['lines']) else 0.0
         speech_identity = (['elevenlabs', line['zh'], voice, rate, tts_model] if legacy_audio else
                            ['elevenlabs-context-v2', line['zh'], voice, rate,
                             tts_model, stability, previous_text, next_text])
+        if tts_model in EXPRESSIVE_MODELS:
+            speech_identity = ['elevenlabs-performance-v1', spoken, voice, tts_model,
+                               voice_settings(tts_model, rate, stability)]
         digest = hashlib.sha256(json.dumps(speech_identity).encode()).hexdigest()[:20]
         mp3 = assets / f'{digest}.mp3'
         gap_digest = hashlib.sha256(str(gap).encode()).hexdigest()[:8]
         wav = assets / (f'{digest}_balanced_v1.wav' if legacy_audio else f'{digest}_balanced_v2_{gap_digest}.wav')
+        if tts_model in EXPRESSIVE_MODELS:
+            wav = assets / f'{digest}_tempo_{rate}_balanced_v2_{gap_digest}.wav'
         # Context and voice settings affect speech; the appended gap affects only WAV reuse.
         # Copy only exact cache filenames, including when upgrading an old episode.
         for target in (mp3, wav):
@@ -421,33 +453,48 @@ def _export_video(lesson, out, options, log=lambda s: None, cancel=None):
                     shutil.copyfile(cached, target)
                 elif source.is_file() and source.resolve() != target.resolve():
                     shutil.copyfile(source, target)
-        log(f'Giọng đọc {i + 1}/{len(lesson["lines"])} · {line["speaker"]}')
+        log((f'Nghe thử {i-start+1}/{end-start} · lượt {i+1}' if preview else
+             f'Giọng đọc {i + 1}/{len(lesson["lines"])}') + f' · {line["speaker"]}')
         if not mp3.exists() or mp3.stat().st_size < 500:
             from speech_recovery import recover_audio
             pending_file = mp3.with_suffix('.request.json')
+            cached_pending = cache / pending_file.name
+            if cached_pending.is_file() and not pending_file.is_file():
+                shutil.copyfile(cached_pending, pending_file)
             if pending_file.is_file():
                 log(f'Kiểm tra lịch sử ElevenLabs cho lượt {i+1}, không tạo lại…')
                 pending = json.loads(pending_file.read_text(encoding='utf-8'))
                 if not recover_audio(pending, api_key, mp3, cancel):
                     raise RuntimeError(f'Lượt {i+1} từng bị ngắt; chưa lấy lại được file từ lịch sử ElevenLabs. Kiểm tra lịch sử tài khoản trước khi tạo lại để tránh trừ credit hai lần.')
             else:
-                pending = {'requested_at': time.time(), 'text': line['zh'], 'voice': voice,
+                pending = {'requested_at': time.time(), 'text': spoken, 'voice': voice,
                            'speed': rate, 'stability': stability, 'model': tts_model}
+                if tts_model in EXPRESSIVE_MODELS:
+                    pending['voice_settings'] = voice_settings(tts_model, rate, stability)
                 _save_job(pending_file, pending)
+                _save_job(cached_pending, pending)
                 try:
-                    speech(line['zh'], voice, rate, mp3, cancel, api_key, tts_model,
+                    speech(spoken, voice, rate, mp3, cancel, api_key, tts_model,
                            previous_text=previous_text, next_text=next_text, stability=stability)
                 except SpeechRejected:
                     pending_file.unlink(missing_ok=True)
+                    cached_pending.unlink(missing_ok=True)
                     raise
                 except SpeechNetworkError:
                     log(f'Mất phản hồi ở lượt {i+1}; thử lấy audio đã tạo từ lịch sử, không gửi lại TTS…')
                     if not recover_audio(pending, api_key, mp3, cancel):
                         raise
+            # Preserve a successful paid response before any local conversion can fail.
+            cached_mp3 = cache / mp3.name
+            temporary = cached_mp3.with_suffix('.partial.mp3')
+            shutil.copyfile(mp3, temporary)
+            temporary.replace(cached_mp3)
             pending_file.unlink(missing_ok=True)
+            cached_pending.unlink(missing_ok=True)
         if not wav.exists():
             temp_wav = wav.with_suffix('.partial.wav')
             run([FFMPEG, '-y', '-v', 'error', '-i', mp3, '-af',
+                 (f'atempo={rate},' if tts_model in EXPRESSIVE_MODELS else '') +
                  f'loudnorm=I=-16:TP=-1.5:LRA=11,apad=pad_dur={gap:.6f}',
                  '-ar', '24000', '-ac', '1', temp_wav], cancel)
             temp_wav.replace(wav)
@@ -459,8 +506,21 @@ def _export_video(lesson, out, options, log=lambda s: None, cancel=None):
                 temporary.replace(cached)
         durations.append(wav_duration(wav))
         audio_paths.append(wav)
-        job['completed_turns'] = i+1
+        job['completed_turns'] = i-start+1
         _save_job(job_file, job)
+    if preview:
+        target = out / 'nghe_thu.wav'
+        temporary = out / 'nghe_thu.partial.wav'
+        with wave.open(str(temporary), 'wb') as combined:
+            combined.setparams((1, 2, 24000, 0, 'NONE', 'not compressed'))
+            for audio in audio_paths:
+                check(cancel)
+                with wave.open(str(audio), 'rb') as source:
+                    combined.writeframes(source.readframes(source.getnframes()))
+        temporary.replace(target)
+        job.update(state='complete', error=None)
+        _save_job(job_file, job)
+        return target
     full_audio = assets / 'full.wav'
     srt_en, srt_bi, timeline = [], [], []
     current = 0.0
@@ -505,6 +565,7 @@ def _export_video(lesson, out, options, log=lambda s: None, cancel=None):
                                                   'voices': voices, 'speaker_voices': saved_voices,
                                                   'speed': rate, 'stability': stability, 'turn_gap': turn_gap,
                                                   'speech_context': speech_context, 'legacy_audio': legacy_audio,
+                                                  'expression': expression,
                                                   'tts_provider': 'ElevenLabs',
                                                   'tts_model': tts_model, 'mode': 'podcast', 'passes': 1,
                                                   'audio_normalization': 'loudnorm I=-16 TP=-1.5 LRA=11 per turn',

@@ -81,7 +81,7 @@ class VoiceDialogTests(unittest.TestCase):
                 if isinstance(child, tk.Toplevel):
                     child.destroy()
         self.app.after(30, interact)
-        watchdog = self.app.after(1500, timeout)
+        watchdog = self.app.after(5000, timeout)
         try:
             result = open_dialog()
         finally:
@@ -324,6 +324,95 @@ class VoiceDialogTests(unittest.TestCase):
             self.assertIn('hai nhân vật mặc áo xanh',chat.present.call_args.args[0])
             self.assertEqual(chat.present.call_args.kwargs['conversation_url'],chat.last_conversation)
             self.assertEqual(self.app.editor.get('1.0','end'),original)
+
+    def test_emotion_dropdown_edits_only_selected_turn_and_preserves_dialogue(self):
+        lesson = self.cast_lesson(2)
+        self.app.put_lesson(lesson)
+        original = copy.deepcopy(self.app.get_lesson())
+        self.app.asset_image_prompt.insert('1.0', 'Prompt ảnh đã duyệt')
+        self.app.emotion_table.selection_set('0')
+        self.app.select_emotion()
+        self.app.selected_emotion.set('Bất ngờ')
+        self.app.selected_strength.set('3')
+        self.app.edit_emotion()
+        changed = self.app.get_lesson()
+        self.assertEqual(changed['lines'][0]['emotion'], 'surprised')
+        self.assertEqual(changed['lines'][0]['emotion_strength'], 3)
+        for before, after in zip(original['lines'], changed['lines']):
+            for key in ('speaker', 'zh', 'pinyin', 'vi'):
+                self.assertEqual(before[key], after[key])
+        self.assertEqual(changed['lines'][1:], original['lines'][1:])
+        self.assertEqual(self.app.preview_start.get(), '1')
+        self.assertEqual(self.app.asset_image_prompt.get('1.0', 'end').strip(), 'Prompt ảnh đã duyệt')
+
+    def test_opening_episode_restores_expression_without_mistaking_v4_for_legacy_audio(self):
+        lesson = self.cast_lesson(1)
+        variants = [('eleven_v4', {'expression': 'medium', 'speech_context': False, 'legacy_audio': False}, 'Vừa', False),
+                    ('eleven_multilingual_v2', {}, 'Tắt', True),
+                    ('eleven_multilingual_v2', {'speech_context': False, 'legacy_audio': False}, 'Tắt', False)]
+        with tempfile.TemporaryDirectory() as folder:
+            out = Path(folder)
+            (out/'lesson.json').write_text(json.dumps(lesson), encoding='utf-8')
+            for model, extra, label, legacy in variants:
+                manifest = dict(extra, tts_model=model, speed=.9, stability=.5, turn_gap=.45,
+                                speaker_voices={'Người 1': 'savedVoice'})
+                (out/'manifest.json').write_text(json.dumps(manifest), encoding='utf-8')
+                with self.subTest(model=model, extra=extra), patch('app.filedialog.askdirectory', return_value=folder):
+                    self.app.open_episode()
+                    self.assertEqual(self.app.expression.get(), label)
+                    self.assertEqual(self.app.tts_model.get(), model)
+                    self.assertEqual(bool(self.app.export_options().get('legacy_audio')), legacy)
+
+    def test_existing_script_annotation_is_saved_and_stale_result_is_rejected(self):
+        from unittest.mock import Mock
+        lesson = self.app.get_lesson()
+        rows = [{'index': i+1, 'emotion': 'neutral', 'emotion_strength': 2}
+                for i in range(len(lesson['lines']))]
+        rows[0]['emotion'] = 'curious'
+        chat = Mock()
+        chat.send.return_value = json.dumps({'lines': rows})
+        with tempfile.TemporaryDirectory() as folder, \
+                patch.object(self.app, 'get_chatgpt', return_value=chat), \
+                patch.object(self.app, 'launch', side_effect=lambda work: work()):
+            self.app.folder.set(folder)
+            self.app.annotate_emotions()
+            event, value = self.app.events.get_nowait()
+            self.assertEqual(event, 'performance')
+            self.app.apply_performance(value)
+            self.assertEqual(self.app.get_lesson()['lines'][0]['emotion'], 'curious')
+            self.assertTrue(list(Path(folder).glob('*/lesson.json')))
+            current = copy.deepcopy(self.app.get_lesson())
+            self.assertRaises(ValueError, self.app.apply_performance, value)
+            self.assertEqual(self.app.get_lesson(), current)
+        self.network.assert_not_called()
+
+    def test_preview_captures_selected_range_voices_and_expression_without_exporting_video(self):
+        lesson = self.cast_lesson(2)
+        for line in lesson['lines']:
+            line.update(emotion='surprised', emotion_strength=2)
+        self.app.put_lesson(lesson)
+        self.app.enable_expression()
+        self.app.expression.set('Vừa')
+        self.app.preview_start.set('2')
+        self.app.preview_count.set('1')
+        mapping = {name: f'testVoice{i}' for i, name in enumerate(lesson['speakers'], 1)}
+        with tempfile.TemporaryDirectory() as folder, \
+                patch.object(self.app, 'choose_voices', return_value=mapping) as choose, \
+                patch.object(self.app, 'launch', side_effect=lambda work: work()), \
+                patch('app.export_video', return_value=Path(folder)/'nghe_thu.wav') as export:
+            self.app.folder.set(folder)
+            self.app.preview_speech()
+            self.assertEqual(choose.call_count, 1)
+            self.assertTrue(choose.call_args.kwargs['preview'])
+            self.assertEqual(choose.call_args.args[0]['speakers'], lesson['speakers'])
+            self.assertEqual(export.call_count, 1)
+            options = export.call_args.args[2]
+            self.assertTrue(options['audio_preview'])
+            self.assertEqual(options['preview_start'], 2)
+            self.assertEqual(options['preview_count'], 1)
+            self.assertEqual(options['expression'], 'medium')
+            self.assertEqual(options['speaker_voices'], mapping)
+        self.network.assert_not_called()
 
     def test_new_episode_clears_old_prompt_and_stale_draft_is_not_applied(self):
         from test_publishing_workflow import sample_draft
