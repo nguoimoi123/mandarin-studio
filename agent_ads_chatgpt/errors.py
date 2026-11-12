@@ -1,0 +1,2 @@
+class ChatGPTError(RuntimeError):
+    pass

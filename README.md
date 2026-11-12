@@ -1,64 +1,81 @@
-# Mandarin Studio · ElevenLabs
+# Mandarin Studio · Podcast Trung–Việt
 
-Tool Windows tạo video học tiếng Trung từ chủ đề: chữ Hán giản thể + pinyin có dấu thanh + nghĩa tiếng Việt.
+Tool Windows tạo kịch bản JSON và video podcast có chữ Hán, pinyin, nghĩa Việt. ChatGPT chạy trong tab Microsoft Edge bạn đang đăng nhập. ElevenLabs tạo giọng đọc.
 
-## Cách dùng
+## Luồng sử dụng hiện tại
 
-1. Cài Python 3.12 trở lên trên Windows, tải repo rồi chạy `start.bat` lần đầu để cài thư viện. Chạy `install_shortcuts.ps1` bằng PowerShell để tạo icon. Những lần sau nhấp đúp **Mandarin Studio** trên Desktop hoặc trong Start Menu. App mở không kèm terminal, có icon riêng. `start.bat` vẫn dùng được để cài môi trường khi cần; cách này có thể hiện terminal trong lúc khởi tạo. Lỗi khởi động được ghi ở `startup.log`.
-2. Tab **Cấu hình**: nhập Gemini API key để viết hội thoại; chọn model, chất lượng và thư mục xuất.
-3. Tab **ElevenLabs**: nhập ElevenLabs API key, Voice ID cho Ngọc và Quân, chọn model và tốc độ. Ưu tiên giọng Mandarin đã nghe thử trong tài khoản của bạn. Dùng Voice ID, không dùng tên giọng hoặc URL.
-4. Tab **Bài học**: nhập chủ đề, chọn HSK 1–2 / 3–4 / 5–6, thời lượng mục tiêu và tên kênh.
-5. Bấm **Tạo video tự động từ chủ đề**. Tool viết kịch bản, tạo giọng tiếng Trung và xuất MP4.
+1. **Có kịch bản JSON rồi:** bấm **Mở JSON**. Nội dung và tên nhân vật trong bài được giữ nguyên.
+2. **Tạo bài mới:** nhập chủ đề, trình độ, thời lượng; chọn **Số người nói** từ 1 đến 10. Tool tự đặt nhãn `Người 1`, `Người 2`…; không cần gõ tên nhân vật.
+3. Chọn giọng cho từng người bằng dropdown. Dropdown dùng tên gợi nhớ trong kho; nếu chưa đặt tên, hiển thị Voice ID. Có thể dùng cùng một giọng cho nhiều người.
+4. Bấm **Tạo kịch bản JSON**. Bước này chỉ viết bài, lưu `lesson.json` và hiện bài trong trình soạn thảo; không gọi TTS, không tạo ảnh, mô tả hoặc bộ đăng. Bấm **Lưu JSON** nếu muốn lưu sang vị trí khác.
+5. Khi cần video, bấm **Chọn giọng & xuất MP4…**, duyệt cách gán giọng rồi xuất. Video có SRT; bật Premium để dùng bố cục mới và tùy chọn tối đa 3 Shorts. Các đoạn Shorts lấy nguyên lượt thoại, tối đa 58 giây và không gọi thêm TTS. App không tự tạo thumbnail/bộ đăng trên máy khi xuất video.
+6. **Prompt ảnh và bộ đăng:** mở tab **Ảnh & bộ đăng**, bấm **1. Viết prompt ảnh + tên video, tiêu đề, mô tả**. ChatGPT viết tên file video gợi ý, 3 tiêu đề, mô tả và prompt thumbnail; bước này **chưa tạo ảnh**. Tool hiển thị các trường để bạn sửa.
+7. Chọn một tiêu đề (hoặc tự sửa), chỉnh mô tả rồi bấm **Gửi tên video, tiêu đề & mô tả lên chat để copy**. Nội dung được trình bày trong chat để bạn sao chép đăng YouTube.
+8. Xem/sửa prompt ảnh rồi bấm **2. Tạo ảnh từ prompt trên ChatGPT**. Chỉ lúc này tool mới gửi yêu cầu tạo ảnh. Ảnh nằm trên Edge để bạn tự tải; không tự đăng, không tải ảnh về tool. Nếu bạn chuyển sang chat khác, tool yêu cầu quay lại chat đã viết prompt trước khi gửi tiếp, tránh gán nhầm ngữ cảnh. Tên file video chỉ là gợi ý để copy, không tự đổi tên MP4 đã xuất.
 
-Để dùng bài có sẵn: bấm **Bài mẫu** hoặc **Mở JSON**, chỉnh nội dung rồi bấm **Tạo giọng & xuất MP4**. Cả hai cách xuất đều cần cấu hình ElevenLabs. Key không cần gửi vào chat.
+Kịch bản JSON và các trường bộ đăng được giữ riêng. Đổi sang kịch bản khác sẽ xóa bản prompt/bộ đăng cũ trong giao diện để tránh dùng nhầm. Nội dung đang sửa trong tab Ảnh & bộ đăng chỉ giữ trong phiên app; gửi/copy phần cần dùng trước khi đóng tool.
 
-## Định dạng podcast
+Mức HSK, pinyin, bản dịch và chất lượng giọng cần người dùng xem/nghe lại. Thời lượng là ước lượng, khoảng 210 chữ Hán/phút, không bảo đảm độ dài chính xác.
 
-Hội thoại phát liền mạch một lần, chỉ có khoảng nghỉ tự nhiên 0,45 giây giữa các lượt thoại. Không lặp lại nội dung, không luyện nói, không chia PART hoặc chèn hướng dẫn học. Màn hình hiển thị chữ Hán, pinyin, bản dịch Việt. Không hiển thị tên nhân vật, số câu hoặc thanh tiến độ. Ngọc và Quân trong JSON chỉ dùng để ghép đúng Voice ID.
+## Khởi động
 
+Cài Python 3.12 trở lên, chạy `start.bat` để cài thư viện. Chạy `install_shortcuts.ps1` nếu cần icon Desktop/Start Menu. Icon dùng `launch.pyw`, không mở terminal. Lỗi khởi động ghi ở `startup.log`.
 
-AI được hướng dẫn viết tình huống đời thường có vấn đề, diễn biến và cách giải quyết; mức HSK là mục tiêu do AI tuân theo, chưa có bộ kiểm định từ vựng HSK. Pinyin được AI tạo theo ngữ cảnh và có thể sửa trong JSON. Nên xem lại trước khi đăng.
+Tab **Cấu hình** chọn **ChatGPT Web**. Gemini API vẫn có thể chọn làm dự phòng cho phần kịch bản; nhập key/model trong cấu hình nếu dùng. Không gửi key hoặc mật khẩu vào chat.
 
-Tổng thời lượng là ước lượng cho một lần phát; AI nhắm khoảng 210 chữ Hán mỗi phút. Kịch bản 600 chữ cũ không còn tương đương 10 phút khi bỏ lặp; muốn podcast 10 phút cần nội dung dài hơn, khoảng 2.000–2.200 chữ Hán tùy giọng. Tool hiện dùng thiết kế chữ riêng, chưa tạo ảnh nhân vật hoặc hoạt hình, chưa có tô sáng từng từ hay tự đăng YouTube.
+## Ghép tab Edge đã đăng nhập
 
-## Kết quả
+Tool không khởi chạy Chrome/Edge khác, không sao chép hồ sơ và không đọc cookie hoặc mật khẩu. Tích hợp tham khảo kiến trúc [Agent_ads](https://github.com/phuc123asd/Agent_ads), sau đó chuyển sang tiện ích cục bộ để dùng đúng tab Edge hiện tại. Nguồn worker tham khảo ở `agent_ads_chatgpt/UPSTREAM.md`.
 
-Mỗi lần xuất tạo thư mục riêng trong `outputs`:
+1. Cài tiện ích một lần trong Edge: mở `edge://extensions`, bật Developer mode, chọn **Load unpacked**, chọn thư mục `edge_extension` của dự án.
+2. Trong tool: **Cấu hình** → **Kết nối Edge hiện tại…** → **Sao chép mã kết nối**.
+3. Trên tab ChatGPT đã đăng nhập, mở tiện ích **Mandarin Studio · ChatGPT trên Edge**, dán mã rồi bấm **Kết nối tab này**.
+4. Quay lại tool, bấm **Kiểm tra kết nối Edge**. Giữ tool và tab mở trong lúc tạo bài. Chọn model trực tiếp trên ChatGPT. Không trò chuyện khác trong tab khi tool đang gửi yêu cầu.
+5. Mã đổi khi khởi động lại tool: dán mã mới để ghép lại, không cần đăng nhập lại nếu phiên ChatGPT còn hiệu lực.
 
-- `video.mp4`: 720p hoặc 1080p, H.264/AAC, 24 fps.
-- `lesson.json`: title_zh, title_vi, speakers; lines gồm speaker/zh/pinyin/vi; vocabulary gồm zh/pinyin/vi.
-- `chinese.srt`: chữ Hán cho toàn bộ podcast.
-- `hanzi_pinyin_vietnamese.srt`: chữ Hán, pinyin và nghĩa Việt cho toàn bộ podcast.
-- `thumbnail.png`, `description.txt`, `chapters.txt`, `manifest.json`.
-- `assets`: audio và ảnh trung gian. Mỗi lượt thoại chỉ phát một lần.
+**Sau khi cập nhật tiện ích lên 1.2.0:** tại `edge://extensions`, bấm **Reload / Tải lại** trên tiện ích; làm mới tab ChatGPT rồi kết nối lại. Phiên bản này giữ ngữ cảnh cuộc trò chuyện giữa bước viết prompt, gửi phần chữ để copy và tạo ảnh. Chỉ bản nháp có cấu trúc cần JSON; phần chữ để copy và ảnh được hiển thị bình thường trên chat.
 
+Tiện ích chỉ chạy trong tab được chọn và ghép với server ở `127.0.0.1:8765`. Tool không tự gửi lại khi mất kết nối hoặc timeout. Kiểm tra tab trước khi thử lại. Nếu website yêu cầu xác minh hoặc hết hạn mức, tự xử lý trên website; không bảo đảm Edge luôn tránh được các kiểm tra này.
 
-## Key, dữ liệu và credit
+## Kho 10 giọng
 
-Gemini nhận chủ đề để viết bài. ElevenLabs nhận **chữ Hán** để tạo giọng, không đọc pinyin hoặc bản dịch Việt. Model mặc định `eleven_multilingual_v2`; có thể chọn Flash v2.5 hoặc Turbo v2.5. Tốc độ từ 0.7 đến 1.2.
+Trong tab **ElevenLabs**, nhập API key và mở **Kho 10 giọng…**. Điền những Voice ID bạn muốn dùng, tối đa 10. Tên gợi nhớ là tùy chọn, không phải tên nhân vật. Cấu hình lưu vào `.env` trên máy:
 
-App tự nạp cấu hình từ `.env` trong thư mục dự án khi mở. Khi sửa trong app, key, hai Voice ID, model, tốc độ, thư mục xuất và lựa chọn bài học tự lưu sau 0,7 giây; cũng lưu khi xuất video hoặc đóng app. Có nút **Lưu cấu hình ngay** trong tab ElevenLabs. Key không ghi vào kịch bản hay manifest. `.env` được bỏ qua bởi Git. Có thể cấu hình ban đầu bằng biến môi trường `GEMINI_API_KEY`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_1`, `ELEVENLABS_VOICE_2`.
+```dotenv
+ELEVENLABS_VOICE_1=your_voice_id
+ELEVENLABS_VOICE_1_NAME=Nữ trẻ
+ELEVENLABS_VOICE_2=another_voice_id
+ELEVENLABS_VOICE_2_NAME=Nam trầm
+LESSON_SPEAKER_COUNT=2
+VOICE_SPEED=1.0
+VOICE_STABILITY=0.35
+VOICE_TURN_GAP=0.2
+```
 
-Gemini và ElevenLabs có thể tính phí/trừ quota theo tài khoản. Tool không tự gửi lại yêu cầu ElevenLabs khi gặp lỗi để tránh tính phí trùng. Nếu timeout, kiểm tra lịch sử sử dụng trước khi thử lại. Voice ID phải khả dụng với tài khoản/API key của bạn.
+Các ô tiếp theo dùng `ELEVENLABS_VOICE_3`…`ELEVENLABS_VOICE_10` và tên `_NAME` tương ứng. Không bắt buộc điền đủ 10 ô. Xem `.env.example`.
 
-- 401/403: kiểm tra key/quyền dùng API và giọng.
-- 404: kiểm tra model hoặc Voice ID.
-- 429: kiểm tra quota và giới hạn yêu cầu.
-- Dừng tác vụ: mã hóa dừng nhanh; yêu cầu API đang chạy có thể đợi hết timeout và vẫn có thể tính phí. File `.partial` chưa hoàn tất.
+Lựa chọn dropdown lưu bằng `LESSON_VOICE_SLOT_1`…`LESSON_VOICE_SLOT_10`. Bài mới lưu cách gán vào `speaker_voices` trong JSON nếu đã chọn giọng hợp lệ. Đổi dropdown trên JSON đang mở cập nhật lựa chọn giọng trong bài mà không đổi lời thoại. Giọng đã lưu trong JSON vẫn có thể dùng dù không nằm trong kho hiện tại.
 
-## Kiểm tra
+ElevenLabs nhận chữ Hán và ngữ cảnh trước/sau, không đọc pinyin hoặc bản dịch. Mặc định model `eleven_multilingual_v2`, tốc độ 1.0, độ ổn định 0.35, khoảng nghỉ 0.2 giây giữa lượt, không thêm khoảng nghỉ sau lượt cuối. Có thể chỉnh trong tab ElevenLabs. Tài liệu [Create speech](https://elevenlabs.io/docs/api-reference/text-to-speech/convert).
 
-Chạy `.venv\Scripts\python.exe -m unittest -v`.
+Mỗi lượt được chuẩn hóa bằng FFmpeg loudnorm, mục tiêu -16 LUFS và đỉnh -1.5 dBTP. Cache `.cache/audio` xét chữ Hán, giọng, model, tốc độ, độ ổn định và ngữ cảnh; thay khoảng nghỉ chỉ cần tạo lại WAV, không gọi TTS. Không tự gửi lại ElevenLabs khi timeout để tránh tính phí trùng. Voice ID phải khả dụng với tài khoản API của bạn.
 
-Đã kiểm tra font chữ Trung, pinyin và tiếng Việt; giao diện; cấu trúc yêu cầu Gemini/ElevenLabs với phản hồi giả lập; pipeline MP4 dùng audio im lặng giả lập, thời lượng phát một lần và giải mã FFmpeg. **Chưa gọi ElevenLabs hoặc Gemini bằng key thật**, nên chưa đánh giá chất lượng phát âm thực tế.
+## Khi xuất bị gián đoạn
 
-Tài liệu: https://elevenlabs.io/docs/api-reference/text-to-speech/convert và https://ai.google.dev/api/generate-content.
+Nút **Tiếp tục lần xuất bị gián đoạn…** mở thư mục có `export_job.json` và `lesson.json`, khôi phục thông số xuất gốc rồi dùng lại audio đã xong. Key chỉ lấy từ cấu hình hiện tại; không lưu trong job. Tiến độ được ghi an toàn sau mỗi lượt. Lỗi chi tiết nằm trong `export_job.json` và `task_errors.log`.
 
-## Cân bằng giọng
+Nếu ElevenLabs mất phản hồi sau khi đã nhận yêu cầu, tool tra cứu lịch sử và chỉ tải lại khi có đúng một bản khớp chữ Hán, giọng, model, tốc độ, độ ổn định và khoảng thời gian yêu cầu. Đây là GET audio đã tạo, không gửi lại TTS. Nếu không chứng minh được bản khớp hoặc key thiếu quyền History, tác vụ dừng và giữ dữ liệu để bạn kiểm tra tài khoản; không tự tạo lại đoạn có thể đã trừ credit. Thư mục `assets` có file `.request.json` cho yêu cầu chưa xác định kết quả, không chứa API key.
 
-Mỗi lượt thoại được chuẩn hóa trên máy bằng FFmpeg loudnorm (mục tiêu -16 LUFS, đỉnh tối đa -1,5 dBTP) trước khi ghép. Hai giọng nhỏ/lớn khác nhau sẽ được cân bằng gần nhau; không cần gọi lại ElevenLabs cho bước chuẩn hóa. Các WAV dùng hậu tố `_balanced_v1` để tránh dùng lại bản chưa cân bằng.
+## Tập cũ và file xuất
 
+**Mở tập cũ để nâng cấp…** nạp `lesson.json`, `manifest.json`, audio trong `assets`. Giữ thông số cũ sẽ dùng lại file phù hợp; bản mới vào thư mục riêng. Audio từ phiên bản cũ có thể giữ nhịp cũ 0.45 giây và độ ổn định 0.5; đổi thông số để chuyển sang đọc có ngữ cảnh mới, có thể phải tạo lại audio.
 
-## File trong repo
+Bài nháp mới chỉ có `lesson.json`. Xuất video có `video.mp4`, JSON, SRT, chương và audio/ảnh trung gian; Premium có preview và Shorts nếu bật. Không có tự đăng YouTube. Kịch bản theo cấu trúc `title_zh`, `title_vi`, `speakers`, `lines` (`speaker/zh/pinyin/vi`), `vocabulary`; `speaker_voices` là tùy chọn. Cho phép 1–10 người và 1–150 lượt.
 
-Repo chỉ chứa mã nguồn, bài mẫu, kiểm thử và icon app. API key (`.env`), môi trường `.venv`, log, video xuất, ảnh kênh và kịch bản riêng được giữ trên máy, không đưa lên GitHub. Có thể tham khảo `.env.example`; cấu hình key trong giao diện app.
+`.env`, `.venv`, `.cache`, video xuất, log và kịch bản riêng được Git bỏ qua. Gemini/ElevenLabs có thể tính phí API; ChatGPT dùng hạn mức của tài khoản đã đăng nhập.
+
+## Kiểm thử
+
+Chạy `.venv\Scripts\python.exe -m unittest -v`. Kiểm thử dùng API và phản hồi Edge giả lập; có kiểm tra Tk dropdown, tách JSON/bộ đăng web, cache audio và pipeline MP4/Shorts bằng FFmpeg. Chưa xác nhận luồng website thật sau bản cập nhật tiện ích này.
+
+Kiểm thử giao thức tiện ích: `node --test test_edge_extension.cjs` (Node.js 18 trở lên). Bao gồm trường hợp gửi ảnh một lần, trả ngữ cảnh chat và chặn gửi khi tab đã chuyển sang chat khác.

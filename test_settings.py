@@ -28,6 +28,21 @@ class SettingsTests(unittest.TestCase):
             self.assertEqual(restored['OTHER_OPTION'], 'keep')
             self.assertIn('# Keep this comment', path.read_text(encoding='utf-8'))
 
+    def test_ten_voice_slots_and_names_roundtrip(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {}, clear=False):
+            path = Path(directory) / '.env'
+            settings = {}
+            for number in range(1, 11):
+                settings[f'ELEVENLABS_VOICE_{number}'] = f'voice-id-{number}'
+                settings[f'ELEVENLABS_VOICE_{number}_NAME'] = f'Giọng {number}'
+            save_settings(path, settings)
+            self.assertEqual(load_settings(path), settings)
+            # An empty bank slot remains optional and must not erase other slots.
+            save_settings(path, {'ELEVENLABS_VOICE_10': ''})
+            restored = load_settings(path)
+            self.assertEqual(restored['ELEVENLABS_VOICE_10'], '')
+            self.assertEqual(restored['ELEVENLABS_VOICE_1'], 'voice-id-1')
+
     def test_failed_write_keeps_existing_file(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / '.env'

@@ -13,3 +13,5 @@ outputs/
 /artwork/*
 !/artwork/mandarin_studio.ico
 /scripts/
+/.cache/
+/tools-l-m-video-podcast/

@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Mandarin Studio · ChatGPT trên Edge",
+  "version": "1.2.0",
+  "description": "Kết nối tab ChatGPT bạn chọn với Mandarin Studio trên máy. Không đọc cookie hoặc mật khẩu.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "background": {"service_worker": "background.js"},
+  "action": {"default_popup": "popup.html"}
+}
