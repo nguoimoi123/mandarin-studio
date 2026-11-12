@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+outputs/
+*.log
+# Local secrets written by `elevenlabs onboard`
+/.env
+.env.*
+!.env.example
+.settings-*.tmp
+*.py[cod]
+# Local videos, channel artwork and draft scripts are not application source.
+/preview*.png
+/artwork/*
+!/artwork/mandarin_studio.ico
+/scripts/

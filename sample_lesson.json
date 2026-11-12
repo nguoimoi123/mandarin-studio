@@ -1,0 +1,17 @@
+{
+  "title_zh": "第一天上班",
+  "title_vi": "Ngày đầu đi làm",
+  "speakers": ["Lin", "Chen"],
+  "lines": [
+    {"speaker": "Lin", "zh": "今天是我第一天上班，我有点儿紧张。", "pinyin": "Jīntiān shì wǒ dì yī tiān shàngbān, wǒ yǒudiǎnr jǐnzhāng.", "vi": "Hôm nay là ngày đầu tôi đi làm, tôi hơi căng thẳng."},
+    {"speaker": "Chen", "zh": "别担心，大家都会帮你的。", "pinyin": "Bié dānxīn, dàjiā dōu huì bāng nǐ de.", "vi": "Đừng lo, mọi người đều sẽ giúp bạn mà."},
+    {"speaker": "Lin", "zh": "如果我做错了，怎么办？", "pinyin": "Rúguǒ wǒ zuò cuò le, zěnme bàn?", "vi": "Nếu tôi làm sai thì phải làm sao?"},
+    {"speaker": "Chen", "zh": "没关系，先问清楚，再试一次。", "pinyin": "Méi guānxi, xiān wèn qīngchu, zài shì yí cì.", "vi": "Không sao, hãy hỏi cho rõ rồi thử lại một lần nữa."}
+  ],
+  "vocabulary": [
+    {"zh": "紧张", "pinyin": "jǐnzhāng", "vi": "căng thẳng"},
+    {"zh": "担心", "pinyin": "dānxīn", "vi": "lo lắng"},
+    {"zh": "上班", "pinyin": "shàngbān", "vi": "đi làm"},
+    {"zh": "问清楚", "pinyin": "wèn qīngchu", "vi": "hỏi cho rõ"}
+  ]
+}
